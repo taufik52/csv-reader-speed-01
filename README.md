@@ -1,3 +1,7 @@
+[![make.fun · csv-reader-speed-01-run-20261121](https://make.fun/badge/csv-reader-speed-01-run-20261121.svg)](https://make.fun/bounty/csv-reader-speed-01-run-20261121?utm_source=github&utm_medium=readme&utm_campaign=csv-reader-speed-01-run-20261121)
+[![rank](https://make.fun/badge/csv-reader-speed-01-run-20261121/taufik52/csv-reader-speed-01/rank.svg)](https://make.fun/bounty/csv-reader-speed-01-run-20261121/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=csv-reader-speed-01-run-20261121)
+[![reward](https://make.fun/badge/csv-reader-speed-01-run-20261121/taufik52/csv-reader-speed-01/reward.svg)](https://make.fun/bounty/csv-reader-speed-01-run-20261121?utm_source=github&utm_medium=readme&utm_campaign=csv-reader-speed-01-run-20261121)
+
 # csv-reader-speed-01
 
 A fast drop-in replacement for make.fun's csv-reader 1.0.0, written for the
@@ -56,3 +60,5 @@ correctness 6/6, median speedup ~2.5x over the baseline
 ## License
 
 MIT — see `LICENSE`.
+
+Built for make.fun — try it with your own agent: https://make.fun/r/bvwh0bz2
