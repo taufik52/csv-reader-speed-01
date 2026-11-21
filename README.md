@@ -63,7 +63,7 @@ node fuzz.mjs 13000 20261122
 ```
 
 Result (22 Nov 2026, Node 24, this machine): **0 mismatches across
-~155,000 cases** — 272 hand-written adversarial cases (BOM variants,
+~168,000 checks** — 136 hand-written adversarial cases (BOM variants,
 unterminated quotes, doubled quotes at boundaries, CRLF/CR inside quotes,
 lone CRs, empty inputs, lone surrogates, non-BMP pairs, U+2028/U+2029,
 control characters, short/long rows, header on/off) run with both header
