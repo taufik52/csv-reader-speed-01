@@ -1,8 +1,10 @@
 // csv-reader 1.0.0, run through the Rust SIMD128 transducer (csv.wasm).
-// A case is parsed and its JSON emitted entirely inside WASM, so the driver
-// never builds rows or runs JSON.stringify; run() returns the answer object
-// (parsed from the case's JSON bytes, only for the differential harness and
-// the bench), while main.ts writes the WASM bytes straight to answers.json.
+// Two paths share the one WASM module:
+//   - run(input) — the entry contract: one case, answer object (used by the
+//     differential fuzz harness and the bench; the old per-case path).
+//   - transduce(raw) — the timed path: the whole cases.json file as bytes,
+//     one WASM call, answers.json bytes straight out. No JSON.parse, no
+//     per-case UTF-16 encode, no JSON.stringify anywhere in the timed path.
 import { readFileSync } from "node:fs";
 
 const bytes = readFileSync(new URL("./csv.wasm", import.meta.url));
@@ -27,6 +29,15 @@ export function run(input) {
   const p = wasm.csv_last_ptr();
   const n = wasm.csv_last_len();
   return JSON.parse(Buffer.from(new Uint8Array(wasm.memory.buffer, p, n)).toString("utf8"));
+}
+
+/// Transduce a whole cases.json file: `raw` is the file's bytes (a Buffer
+/// or Uint8Array). Returns the answers.json byte length; the bytes sit at
+/// csv_out_ptr() until the next call. Returns 0 on malformed input.
+export function transduce(raw) {
+  const ptr = wasm.csv_input_ptr(raw.length);
+  new Uint8Array(wasm.memory.buffer, ptr, raw.length).set(raw);
+  return wasm.csv_transduce(ptr, raw.length);
 }
 
 export const wasmExports = wasm;
