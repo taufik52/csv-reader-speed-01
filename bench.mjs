@@ -3,7 +3,7 @@
 //
 // Usage (from this repo root):
 //   node bench.mjs [--trials N] [--kit <kit dir>]
-// Defaults: trials 5, kit = ../csv-reader-speed-01-kit/csv-reader-speed-01-run-20261121-kit
+// Defaults: trials 5, kit = ../csv-reader-kit-36/csv-reader-speed-01-run-20261121-kit
 // Reads practice/input/cases.json and practice/reference/expected.json from the kit.
 // Prints per-case correctness (mine vs expected, baseline vs expected) and the
 // median wall time of each implementation over the trials, with the speedup.
@@ -18,7 +18,7 @@ const trialsIdx = args.indexOf('--trials');
 const trials = (trialsIdx !== -1 && Number(args[trialsIdx + 1])) || 5;
 const kitIdx = args.indexOf('--kit');
 const kitArg = kitIdx !== -1 ? args[kitIdx + 1] : undefined;
-const kit = kitArg ?? join(here, '..', 'csv-reader-speed-01-kit', 'csv-reader-speed-01-run-20261121-kit');
+const kit = kitArg ?? join(here, '..', 'csv-reader-kit-36', 'csv-reader-speed-01-run-20261121-kit');
 
 const { run: mine } = await import(new URL('./solve.js', import.meta.url).href);
 const { run: baseline } = await import(new URL(join(kit, 'baselines', 'csv-reader', 'solve.js'), import.meta.url).href);

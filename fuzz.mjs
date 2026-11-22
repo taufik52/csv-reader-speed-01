@@ -1,15 +1,16 @@
-// Differential fuzz: WASM entry vs csv-reader 1.0.0 reference (kit baseline).
+// Differential fuzz: WASM entry (v3 UTF-8 transducer) vs csv-reader 1.0.0
+// reference (kit baseline) vs the v2 UTF-16 WASM entry.
 // Compares both canonical values AND JSON.stringify bytes (catches key order).
 // Seeded PRNG, so a run is reproducible. Usage: node fuzz.mjs [N] [seed]
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const KIT = "/home/hatch/workspace/makefun/work/csv-reader-speed-01-run-20261121-kit/csv-reader-speed-01-run-20261121-kit";
+const KIT = "/home/hatch/workspace/makefun/csv-reader-kit-36/csv-reader-speed-01-run-20261121-kit";
 
 const { run: mine } = await import(new URL("./solve.js", import.meta.url).href);
 const { run: ref } = await import(new URL(join(KIT, "baselines", "csv-reader", "solve.js"), import.meta.url).href);
-const { run: oldjs } = await import(new URL("../csv-reader-speed-01-entry/solve.js", import.meta.url).href);
+const { run: oldjs } = await import(new URL("/home/hatch/workspace/makefun/csv-reader-v2/solve.js", import.meta.url).href);
 
 const N = Number(process.argv[2] || 13000);
 const SEED = Number(process.argv[3] || 20261122);
@@ -85,6 +86,30 @@ const ADV = [
   "\uFEFF\"a\",b", "\uFEFFa,b\nc,d", "a\uFEFFb,c",
 ];
 
+// ---- v3 chunk-boundary cases: surrogate pairs / lone surrogates at every
+// offset around the 16-byte SIMD chunk edges, quoted and unquoted, plus long
+// fields, backslash/tab/control runs, and BOM + long text ----
+const ADV2 = [];
+for (const k of [0, 1, 13, 14, 15, 16, 17, 18, 29, 30, 31, 32, 33, 47, 48, 49]) {
+  const pad = "a".repeat(k);
+  ADV2.push(pad + "\uD800\uDC00" + ",b", pad + "\uD800" + ",b", pad + "\uDC00" + ",b");
+  ADV2.push(pad + "\uD83D\uDE00" + ",b", pad + "\uD800\uD800\uDC00" + ",b", pad + "\uD800\uDC00\uDC00" + ",b");
+  ADV2.push("\"" + pad + "\uD800\uDC00" + "\",b", "\"" + pad + "\uD800" + "\",b", "\"" + pad + "\uDC00" + "\",b");
+  ADV2.push(pad + ",\"\uD800\uDC00\"", pad + ",\"\uD800\"", pad + "\"\"");
+  ADV2.push(pad + "\uD800\uDC00" + "\n" + pad + ",c");
+}
+ADV2.push(
+  "a".repeat(5000) + ",b", "\"" + "a".repeat(5000) + "\",b", "a".repeat(4096) + "\uD800\uDC00,b",
+  "a".repeat(1000) + "\"\"\"\"\"\"\"\",b", "\"" + "x".repeat(100) + "\"\"\"\"\"\"y\",z",
+  "\\\\,\\\\\\\\,a", "a\\b\\c,d", "\t\t,\t", "a\t\t\tb,c", "\u0000\u0001\u0002\u001F,",
+  "\"\u0000\u0001\u001F\",a", "\u0000".repeat(40) + ",b", "é".repeat(100) + ",ü",
+  "\uFEFF" + "a".repeat(100) + ",b", "a\uFEFF".repeat(30) + ",b",
+  "\"a\"\"b\"\"c\"\"d\",e", "\"".repeat(33) + ",a", "\"".repeat(34) + ",a",
+  "a\r".repeat(20) + "b", "\r".repeat(17) + "a", "\n".repeat(17) + "a,b",
+  "x".repeat(15) + "\r\n" + "y".repeat(15), "x".repeat(16) + "\r" + "y",
+  "\"multi\nline\nwith\nnewlines\",b\nc,d", "\"a\rb\rc\rd\",e",
+);
+
 let checked = 0, mism = 0;
 function check(input, label) {
   checked++;
@@ -106,6 +131,9 @@ function check(input, label) {
 for (const a of ADV) check({ text: a, header: false }, "adv-nohdr");
 for (const a of ADV) check({ text: a, header: true }, "adv-hdr");
 console.log(`adversarial: ${ADV.length * 2} cases, mismatches so far: ${mism}`);
+for (const a of ADV2) check({ text: a, header: false }, "adv2-nohdr");
+for (const a of ADV2) check({ text: a, header: true }, "adv2-hdr");
+console.log(`adversarial2 (chunk boundaries): ${ADV2.length * 2} cases, mismatches so far: ${mism}`);
 for (let i = 0; i < N; i++) check(randCase(), `rand-${i}`);
 console.log(`TOTAL: ${checked} cases checked, ${mism} mismatches (seed ${SEED})`);
 process.exit(mism === 0 ? 0 : 1);

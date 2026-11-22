@@ -6,13 +6,15 @@
 //
 // The difference from the house driver: the whole file is transduced in
 // one WASM call — the answers are never built as JS values, never parsed
-// from JSON, never stringified. The Rust transducer reads the raw file
-// bytes, unescapes each case's text itself, parses the CSV, and emits each
-// case's JSON straight into its output buffer; answers.json is written from
-// that buffer as it stands — byte-for-byte the JSON the parser emitted,
-// which is byte-identical to JSON.stringify of the same values (same key
-// order, same escaping as V8: lowercase \u hex, lone surrogates escaped,
-// non-ASCII raw).
+// from JSON, never stringified. The Rust transducer (v3: UTF-8 bytes
+// throughout, fused SIMD scan+emit per field) reads the raw file bytes,
+// unescapes each case's text itself, parses the CSV, and emits each case's
+// JSON straight into its output buffer; answers.json is written from that
+// buffer as it stands — byte-for-byte the JSON the parser emitted, which
+// is byte-identical to JSON.stringify of the same values (same key order,
+// same escaping as V8: lowercase \u hex, lone surrogates escaped,
+// non-ASCII raw). A lone surrogate in a \uXXXX escape falls back to the
+// v2 UTF-16 transducer for that case, inside the same module.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
