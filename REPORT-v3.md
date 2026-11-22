@@ -39,7 +39,7 @@ ditembus; kuota hari ini 5 tersisa.
   transduce CPU in-process + cek byte-identik).
 - `main.ts` — komentar diperbarui (v3 UTF-8 + fallback).
 - `csv.wasm` — 119.555 byte (dua parser + forced inlining; tetap jauh
-  di bawah 1 MiB; total repo ~270 KB).
+  di bawah 1 MiB; total file kerja ~229 KB, di luar .git).
 
 ## Profiling (yang diukur, bukan ditebak)
 
@@ -60,6 +60,23 @@ quote_junk 284, stray_cr 260, unterminated 2.
   Reload chunk SIMD per field ternyata lebih murah daripada overhead
   state-machine skalar per point. Pelajaran: biaya per-field didominasi
   overhead skalar, bukan op SIMD.
+- **Fusi unescape JSON + parse CSV DICOBA dan DIBATALKAN** (22 Nov,
+  setelah commit di atas): parser fused yang membaca CSV langsung dari
+  byte JSON-escaped (tanpa pass TEXT8), dengan end-finder SIMD untuk
+  span string dan fallback UTF-16 saat lone surrogate. A/B bersih
+  (dua wasm di proses yang sama, bergantian, CPU): fused best 56,6 ms
+  / med 58,5 ms vs dua-fase best 45,8 ms / med 48,3 ms — fused
+  **~11 ms LEBIH LAMBAT**. 418 ribu escape butuh decode skalar di
+  dalam loop parse, lebih mahal daripada pass unescape SIMD yang
+  dihapus, ditambah pass end-finder. Output fused byte-identik dengan
+  dua-fase (sha sama), tapi kecepatannya kalah — build dikembalikan ke
+  dua-fase (`a69aac8`, tidak berubah). Kode fused tersimpan di luar
+  repo sebagai referensi; satu bug splice sempat terjadi saat
+  penyambungan (atribut `#[no_mangle]` tertinggal menempel ke enum
+  dan `csv_transduce` baru kehilangan ekspornya — diperbaiki, lalu
+  tetap dibatalkan karena A/B kalah). Pelajaran: satu pass bukan
+  otomatis lebih cepat bila pass itu memindahkan kerja skalar ke
+  dalam loop terpanas.
 - **Forced `#[inline(always)]` pada reader MENANG**: A/B: parse8-only
   36 → 30 ms, `a,` 149 → 99 ms, transduce med 77–82 → 71–72 ms.
   Inlining `json_string_u8` + `parse_case8` juga: tidak ada beda
@@ -101,15 +118,29 @@ ada surrogate di teks UTF-8). Pasca-perbaikan: fuzz-json 21.000 kasus
   (5 seed), 0 mismatch**; uji lone-surrogate transduce khusus
   (pasangan/lone/astral/`\u00e9`/`\uFFFF`, malformed → 0,
   `[]` → 2) lolos.
-- grade-local 2x `--driver process --worktree` (sebelum perbaikan
-  surrogate — output practice tak berubah karena 0 lone surrogate,
-  tapi grade-local final diulang di bawah setelah fusi/keputusan
-  akhir): 6/6, passed, prize_eligible, L1 reproduced,
-  result_sha256 identik `4ecdb81850bbd9210660aa873b08a07cc848c03c4c77e64d402fc7343f449d35`.
-- Bench-alone, fresh process, 20 trial round-robin (median wall):
-  v3 341,0 ms (net 45,1), v2 391,1 ms (net 95,3), baseline 1.723,0 ms
-  (net 1.427,2), null 295,9 ms. **Net: 2,11x vs v2; 31,6x vs baseline.**
-- Repo 270 KB total (≤1 MiB). `node --check` solve/main/fuzz OK.
+- grade-local 2x `--driver process --worktree` **pada build final
+  `a69aac8`** (22 Nov, setelah perbaikan surrogate dan setelah fusi
+  dibatalkan): 6/6, passed, prize_eligible, L1 reproduced byte for
+  byte, result_sha256 identik di kedua run
+  `b91ff2369a0d3fcdab6a4b8eb4e810a8f9890e0e4c1d97d08a5e69e48393f37e`
+  (berbeda dari `4ecdb818…` di run pra-perbaikan karena wasm berubah
+  oleh perbaikan surrogate). Catatan CLI: node lokal v24.22.1 vs
+  server v26.13.1; "authored 0.000000000 of 2144 counted lines"
+  (transcript gate jalan saat submission, domain koordinator).
+- Bench-alone, fresh process, **30 trial round-robin** (median wall,
+  run 22 Nov siang): v3 254,4 ms (net 13,4), v2 319,8 ms (net 78,8),
+  baseline 1.646,4 ms (net 1.405,4). **Gross: 1,26x vs v2; 6,47x vs
+  baseline.** Catatan: angka "net" bergantung pada kontrol null yang
+  melakukan JSON.parse penuh atas input 11 MB — metrik utama adalah
+  transduce CPU A/B (2,4x) dan median gross di atas. Run sebelumnya
+  (20 trial): v3 341,0 ms, v2 391,1 ms, baseline 1.723,0 ms — beban VM
+  berubah-ubah antar run; perbandingan dalam satu run yang sama yang
+  sahih.
+- Repo **~229 KB file kerja (≤1 MiB)**. `node --check` solve/main/fuzz/
+  bench semua OK. Fuzz segar pada build final: **8.738 checks
+  run-level (seed 20261122, termasuk 272 adversarial + 466
+  chunk-boundary), 0 mismatch**; **3.000 checks JSON-level transduce,
+  0 mismatch**.
 - Risiko tercatat: aturan tertulis bilang "no WASM" — server sudah
   grading entry WASM 6/6 prize_eligible dua kali termasuk top-10
   all-WASM, jadi server yang jadi otoritas; bentuk entry sama dengan
@@ -117,9 +148,11 @@ ada surrogate di teks UTF-8). Pasca-perbaikan: fuzz-json 21.000 kasus
 
 ## Status
 
-Build final saat ini **memenuhi submit gate** (transduce lokal 46,8 ms
-≤ 60 ms, demonstrably better dari v2) tapi **belum mencapai target
-≤30 ms**. Sisa peluang terbesar: fusi unescape JSON + parse CSV
-(menghapus pass TEXT8 ~15 ms, perkiraan hemat bersih ~10 ms) — belum
-dikerjakan; lihat keputusan koordinator. Proyeksi server kasar (rasio
-server:lokal v2 ~3,3x): ~150.000 µs.
+Build final **`a69aac8`** **memenuhi submit gate** (transduce lokal
+46,8 ms ≤ 60 ms, demonstrably better dari v2, 2,4x) tapi **belum
+mencapai target ≤30 ms**. Fusi unescape+parse — peluang terbesar yang
+tersisa — sudah dicoba dan **kalah di A/B** (56,6 ms vs 45,8 ms),
+jadi tidak ada lagi tuas besar yang terbukti di meja. Proyeksi server
+kasar (rasio server:lokal v2 ~3,3x): ~150.000 µs (di luar top 100
+yang butuh ≤70.000 µs, tapi jauh lebih baik dari v2 380.000 µs).
+Keputusan submit di tangan koordinator.
